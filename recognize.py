@@ -11,26 +11,32 @@ with open("encodings.pkl", "rb") as f:
 known_encodings = data["encodings"]
 known_ids = data["ids"]
 
-# 🔥 ID → Name mapping
+# ID → Name mapping
 names = {
-    "1": "Joseph(40)",
-    "5":"Rishi(29)",
-    "6":"Atharva(39)",
-    "7":"Arihant(38)",
-    "8":"sir(00)",
-    "9":"Anuj(37)",
-    "10":"Sarvesh(41)",
-    "11":"Shriya(23)"
-    
-    
+    "1": "Joseph",
+    "5": "Rishi",
+    "6": "Atharva",
+    "7": "Arihant",
+    "8": "sir"
 }
 
-# Start camera
+# Start camera (1 = external webcam, 0 = laptop camera)
 cap = cv2.VideoCapture(0)
+
+# 🔥 Increase resolution (important for multiple faces)
+cap.set(3, 1920)   # width
+cap.set(4, 1080)   # height
+
+# 🔥 Fullscreen window
+cv2.namedWindow("Smart Attendance System", cv2.WINDOW_NORMAL)
+cv2.setWindowProperty("Smart Attendance System", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
 marked = set()
 
 print("Press ESC to exit...")
+
+# 🔥 Accuracy threshold
+threshold = 0.5
 
 while True:
     ret, frame = cap.read()
@@ -39,13 +45,13 @@ while True:
         print("Failed to grab frame")
         break
 
-    # Resize for faster processing
-    small_frame = cv2.resize(frame, (0, 0), fx=0.5, fy=0.5)
+    # Resize for faster processing (but still good quality)
+    small_frame = cv2.resize(frame, (0, 0), fx=0.75, fy=0.75)
 
     # Convert BGR → RGB
     rgb = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
 
-    # Detect faces
+    # Detect faces (use CNN for better accuracy if system supports)
     faces = face_recognition.face_locations(rgb)
 
     # Encode faces
@@ -53,13 +59,12 @@ while True:
 
     for (top, right, bottom, left), encoding in zip(faces, encodings):
 
-        # Scale back to original size
-        top *= 2
-        right *= 2
-        bottom *= 2
-        left *= 2
+        # Scale back coordinates
+        top = int(top / 0.75)
+        right = int(right / 0.75)
+        bottom = int(bottom / 0.75)
+        left = int(left / 0.75)
 
-        matches = face_recognition.compare_faces(known_encodings, encoding)
         distances = face_recognition.face_distance(known_encodings, encoding)
 
         name = "Unknown"
@@ -67,7 +72,8 @@ while True:
         if len(distances) > 0:
             best_match_index = np.argmin(distances)
 
-            if matches[best_match_index]:
+            # 🔥 Use threshold instead of boolean match
+            if distances[best_match_index] < threshold:
                 id = known_ids[best_match_index]
                 name = names.get(id, "Unknown")
 
@@ -81,18 +87,30 @@ while True:
         # Draw rectangle
         cv2.rectangle(frame, (left, top), (right, bottom), (0, 255, 0), 2)
 
+        # Confidence score
+        if len(distances) > 0:
+            confidence = 1 - distances[best_match_index]
+            label = f"{name} ({confidence:.2f})"
+        else:
+            label = name
+
         # Put name
-        cv2.putText(frame, name, (left, top - 10),
+        cv2.putText(frame, label, (left, top - 10),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.9,
                     (255, 255, 255), 2)
 
+    # 🔥 Show number of faces detected
+    cv2.putText(frame, f"Faces: {len(faces)}", (20, 40),
+                cv2.FONT_HERSHEY_SIMPLEX, 1,
+                (0, 255, 0), 2)
+
     cv2.imshow("Smart Attendance System", frame)
 
-    # 🔥 FIXED EXIT (ESC key)
+    # ESC to exit
     key = cv2.waitKey(1)
-    if key == 27:  # ESC key
+    if key == 27:
         break
 
-# Release camera properly
+# Release camera
 cap.release()
 cv2.destroyAllWindows()
