@@ -3,6 +3,19 @@ import cv2
 import pickle
 import datetime
 import numpy as np
+import mysql.connector
+
+#  Enter subject at runtime
+SUBJECT = input("Enter subject: ")
+
+#  Connect to MySQL
+db = mysql.connector.connect(
+    host="localhost",
+    user="root",
+    password="pict12345",   
+    database="attendance_system"
+)
+cursor = db.cursor()
 
 # Load encodings
 with open("encodings.pkl", "rb") as f:
@@ -11,25 +24,23 @@ with open("encodings.pkl", "rb") as f:
 known_encodings = data["encodings"]
 known_ids = data["ids"]
 
-# ID → Name mapping
-names = {
-    "1": "Joseph",
-    "5": "Rishi",
-    "6": "Atharva",
-    "7": "Arihant",
-    "8": "sir",
-    "9": "Anuj",
-    "10": "Sarvesh",
-    "11": "Shriya"
+#  ID → Name + Roll mapping (INT roll numbers)
+students = {
+    "1": {"name": "Joseph", "roll": 1},
+    "5": {"name": "Rishi", "roll": 5},
+    "6": {"name": "Atharva", "roll": 6},
+    "7": {"name": "Arihant", "roll": 7},
+    "8": {"name": "sir", "roll": 8},
+    "9": {"name": "Anuj", "roll": 9},
+    "10": {"name": "Sarvesh", "roll": 10},
+    "11": {"name": "Shriya", "roll": 11}
 }
 
-# Start camera
-cap = cv2.VideoCapture(2)
+#  Default laptop camera
+cap = cv2.VideoCapture(1)
 
-# 🔥 Reduce buffer lag (important for mobile cam)
+# Reduce lag
 cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-
-# 🔥 Use lower resolution for speed
 cap.set(3, 640)
 cap.set(4, 480)
 
@@ -38,11 +49,11 @@ cv2.namedWindow("Smart Attendance System", cv2.WINDOW_NORMAL)
 cv2.setWindowProperty("Smart Attendance System", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
 marked = set()
-print("Press ESC to exit...")
-
 threshold = 0.5
 frame_count = 0
 results = []
+
+print("Press ESC to exit...")
 
 while True:
     ret, frame = cap.read()
@@ -50,19 +61,15 @@ while True:
         print("Failed to grab frame")
         break
 
-    # 🔥 Resize early (faster processing)
     frame = cv2.resize(frame, (640, 480))
-
     frame_count += 1
 
-    # 🔥 Process every 3rd frame only
+    #  Process every 3rd frame
     if frame_count % 3 == 0:
 
-        # Smaller frame for detection
         small_frame = cv2.resize(frame, (0, 0), fx=0.5, fy=0.5)
         rgb = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
 
-        # 🔥 Faster model (HOG)
         faces = face_recognition.face_locations(rgb, model="hog")
         encodings = face_recognition.face_encodings(rgb, faces)
 
@@ -70,7 +77,6 @@ while True:
 
         for (top, right, bottom, left), encoding in zip(faces, encodings):
 
-            # Scale coordinates back
             top *= 2
             right *= 2
             bottom *= 2
@@ -79,28 +85,42 @@ while True:
             distances = face_recognition.face_distance(known_encodings, encoding)
 
             name = "Unknown"
+            roll_no = -1
             confidence = 0
 
             if len(distances) > 0:
                 best_match_index = np.argmin(distances)
 
                 if distances[best_match_index] < threshold:
-                    id = known_ids[best_match_index]
-                    name = names.get(id, "Unknown")
-                    confidence = 1 - distances[best_match_index]
+                    student_id = known_ids[best_match_index]
+                    student = students.get(student_id, None)
 
-                    # Mark attendance once
-                    if name not in marked:
-                        with open("attendance.csv", "a") as f:
+                    if student:
+                        name = student["name"]
+                        roll_no = student["roll"]
+                        confidence = 1 - distances[best_match_index]
+
+                        #  Prevent duplicate marking (same subject session)
+                        unique_key = f"{roll_no}_{SUBJECT}"
+
+                        if unique_key not in marked:
                             now = datetime.datetime.now()
-                            f.write(f"{name},{now}\n")
-                        marked.add(name)
+
+                            query = """
+                            INSERT INTO attendance (roll_no, student_name, subject, timestamp)
+                            VALUES (%s, %s, %s, %s)
+                            """
+                            values = (roll_no, name, SUBJECT, now)
+
+                            cursor.execute(query, values)
+                            db.commit()
+
+                            marked.add(unique_key)
 
             results.append((top, right, bottom, left, name, confidence))
 
-    # 🔥 Draw results every frame (smooth display)
+    # Draw results
     for (top, right, bottom, left, name, confidence) in results:
-
         cv2.rectangle(frame, (left, top), (right, bottom), (0, 255, 0), 2)
 
         label = f"{name} ({confidence:.2f})" if name != "Unknown" else name
@@ -109,8 +129,12 @@ while True:
                     cv2.FONT_HERSHEY_SIMPLEX, 0.8,
                     (255, 255, 255), 2)
 
-    # Show face count
-    cv2.putText(frame, f"Faces: {len(results)}", (20, 40),
+    # Display info
+    cv2.putText(frame, f"Subject: {SUBJECT}", (20, 40),
+                cv2.FONT_HERSHEY_SIMPLEX, 1,
+                (0, 255, 0), 2)
+
+    cv2.putText(frame, f"Faces: {len(results)}", (20, 80),
                 cv2.FONT_HERSHEY_SIMPLEX, 1,
                 (0, 255, 0), 2)
 
