@@ -4,7 +4,7 @@ import pickle
 
 dataset_path = "dataset"
 
-# 🔥 Step 1: Load existing encodings (if available)
+#  Step 1: Load existing encodings (if available)
 if os.path.exists("encodings.pkl"):
     with open("encodings.pkl", "rb") as f:
         data = pickle.load(f)
@@ -16,7 +16,7 @@ else:
     known_ids = []
     print("No existing encodings found. Starting fresh...")
 
-# 🔥 Step 2: Load processed files list
+#  Step 2: Load processed files list
 processed_files = set()
 
 if os.path.exists("processed.txt"):
@@ -25,7 +25,7 @@ if os.path.exists("processed.txt"):
 
 print("Already processed files:", processed_files)
 
-# 🔥 Step 3: Process ONLY new images
+#  Step 3: Process ONLY new images
 new_count = 0
 
 for file in os.listdir(dataset_path):
@@ -64,7 +64,7 @@ for file in os.listdir(dataset_path):
     else:
         print(f"No face found in: {file}")
 
-# 🔥 Step 4: Save updated encodings
+#  Step 4: Save updated encodings
 data = {
     "encodings": known_encodings,
     "ids": known_ids
@@ -73,11 +73,11 @@ data = {
 with open("encodings.pkl", "wb") as f:
     pickle.dump(data, f)
 
-# 🔥 Step 5: Save processed file list
+#  Step 5: Save processed file list
 with open("processed.txt", "w") as f:
     for file in processed_files:
         f.write(file + "\n")
 
-print("\n✅ Encoding update complete!")
+print("\n Encoding update complete!")
 print(f"New images processed: {new_count}")
 print(f"Total known faces: {len(known_ids)}")
